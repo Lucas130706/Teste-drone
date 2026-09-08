@@ -28,9 +28,24 @@
     width:340px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border);
     display:flex; flex-direction:column; overflow-y:auto;
   }
-  #map{flex:1; min-width:0; background:#0a0f1a;}
+  #mapWrap{flex:1; min-width:0; position:relative;}
+  #map{position:absolute; inset:0; background:#0a0f1a;}
+  .map-hint{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:500;
+    background:rgba(17,24,39,.92); color:var(--text); border:1px solid var(--border);
+    padding:9px 16px; border-radius:20px; font-size:13px; font-weight:500;
+    box-shadow:0 4px 16px rgba(0,0,0,.4); pointer-events:none; white-space:nowrap;
+  }
   .section{padding:14px 16px; border-bottom:1px solid var(--border);}
-  .section h2{font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 0 10px;}
+  .section h2{
+    font-size:13px; font-weight:700; color:var(--text); margin:0 0 10px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .step-num{
+    flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--panel2);
+    border:1.5px solid var(--accent); color:var(--accent); font-size:11.5px; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
   .row{display:flex; gap:8px; margin-bottom:8px;}
   .field{flex:1; display:flex; flex-direction:column; gap:4px;}
   .field label{font-size:11.5px; color:var(--muted);}
@@ -84,16 +99,20 @@
     background:var(--ok); border-radius:50%; width:16px; height:16px; border:3px solid #04121c22;
     box-shadow:0 0 0 4px rgba(52,211,153,.25);
   }
-  details summary{cursor:pointer; font-size:12.5px; color:var(--accent); font-weight:600; padding:4px 0;}
+  details summary{cursor:pointer; font-size:12.5px; color:var(--accent); font-weight:600; padding:4px 0; list-style:none;}
+  details summary::-webkit-details-marker{display:none;}
   details p, details ol{font-size:12.3px; color:var(--muted); line-height:1.6; margin:8px 0 0;}
   details ol{padding-left:18px;}
-  #footerActions{padding:14px 16px; display:flex; flex-direction:column; gap:8px; margin-top:auto;}
+  .howto{font-size:12.5px; color:var(--muted); line-height:1.65; margin:12px 0 0; padding-left:20px;}
+  .howto li{margin-bottom:6px;}
+  .howto b{color:var(--text);}
+  .warn-note{font-size:12px; color:var(--warn); line-height:1.55; margin:12px 0 0; background:#2a220f; border:1px solid #4a3a15; border-radius:8px; padding:8px 10px;}
   .leaflet-popup-content-wrapper, .leaflet-popup-tip{background:var(--panel2); color:var(--text);}
   .badge{display:inline-block; font-size:10.5px; padding:2px 6px; border-radius:4px; background:#1e293b; color:var(--accent); border:1px solid var(--border);}
   @media (max-width:760px){
     .layout{flex-direction:column;}
-    #sidebar{width:100%; max-height:46vh; border-right:none; border-bottom:1px solid var(--border);}
-    #map{flex:1;}
+    #sidebar{width:100%; max-height:50vh; border-right:none; border-bottom:1px solid var(--border);}
+    #mapWrap{flex:1;}
   }
 </style>
 </head>
@@ -101,78 +120,76 @@
 
 <header>
   <h1>🛰️ Missão do Drone</h1>
-  <span class="sub">marque pontos no mapa → exporte a missão para o Litchi</span>
+  <span class="sub">marque os lugares no mapa — seu drone vai até lá sozinho e tira a foto</span>
 </header>
 
 <div class="layout">
   <div id="sidebar">
 
     <div class="section">
-      <h2>Sua localização</h2>
-      <button id="locateBtn" class="btn-block">📍 Centralizar na minha posição</button>
-    </div>
-
-    <div class="section">
-      <h2>Configurações de voo</h2>
-      <div class="row">
-        <div class="field">
-          <label>Altitude (m)</label>
-          <input type="number" id="cfgAlt" value="30" min="2" max="500" step="1">
-        </div>
-        <div class="field">
-          <label>Velocidade (m/s)</label>
-          <input type="number" id="cfgSpeed" value="0" min="0" max="15" step="0.5">
-        </div>
-      </div>
-      <div class="row">
-        <div class="field">
-          <label>Ângulo da câmera (°)</label>
-          <input type="number" id="cfgGimbal" value="-90" min="-90" max="20" step="5">
-        </div>
-        <div class="field">
-          <label>Altitude relativa a</label>
-          <select id="cfgAltMode">
-            <option value="0">Decolagem</option>
-            <option value="1">Solo (terreno)</option>
-          </select>
-        </div>
-      </div>
-      <div class="status">Velocidade 0 = usa a velocidade padrão definida no app Litchi.</div>
+      <h2><span class="step-num">1</span>Onde você está</h2>
+      <button id="locateBtn" class="btn-block">📍 Mostrar minha localização no mapa</button>
     </div>
 
     <div class="section" style="display:flex; flex-direction:column;">
-      <h2>Pontos da missão (<span id="wpCount">0</span>)</h2>
-      <div id="emptyHint">Clique no mapa para adicionar pontos. O drone visitará cada um, na ordem da lista, e tirará uma foto.</div>
+      <h2><span class="step-num">2</span>Marque os lugares (<span id="wpCount">0</span>)</h2>
+      <div id="emptyHint">Toque ou clique em qualquer ponto do mapa para marcar um lugar. Marque quantos quiser, na ordem em que o drone deve visitar.</div>
       <ul id="waypointList"></ul>
       <label class="loop-toggle">
         <input type="checkbox" id="closeLoopChk">
-        <span>🔁 Voltar ao ponto inicial no final da missão</span>
+        <span>🔁 No final, voltar para o primeiro lugar</span>
       </label>
       <div class="row" style="margin-top:10px;">
-        <button id="clearBtn" class="btn-ghost btn-danger btn-block">🗑️ Limpar todos os pontos</button>
+        <button id="clearBtn" class="btn-ghost btn-danger btn-block">🗑️ Apagar todos os lugares</button>
       </div>
+    </div>
+
+    <div class="section">
+      <h2><span class="step-num">3</span>Baixar o plano de voo</h2>
+      <button id="downloadBtn" class="btn-primary btn-block" disabled>⬇️ Baixar plano de voo</button>
+      <ol class="howto">
+        <li>Abra o app <b>Litchi</b> no celular (é um aplicativo pago, comprado uma única vez na loja do seu celular — ele que tem autorização da DJI para voar seu drone sozinho).</li>
+        <li>Dentro do Litchi, vá em <b>Mission Hub</b> e importe o arquivo que você acabou de baixar.</li>
+        <li>Ligue o drone, conecte o celular nele e inicie a missão pelo Litchi. Ele voa sozinho até cada lugar marcado, na ordem, e tira uma foto em cada um.</li>
+      </ol>
+      <p class="warn-note">⚠️ Antes de voar, confira sempre a missão dentro do Litchi (altura, obstáculos, e se o local é liberado para voo — regras da ANAC/DECEA).</p>
     </div>
 
     <div class="section">
       <details>
-        <summary>Como usar com o seu DJI (Mavic / Air / Mini)</summary>
-        <p>Seu drone DJI não aceita comandos direto de um site — por isso este planejador gera um arquivo de missão para o app <b>Litchi</b>, que tem licença oficial da DJI para voar seu modelo automaticamente.</p>
-        <ol>
-          <li>Marque os pontos no mapa e ajuste altitude/velocidade/câmera.</li>
-          <li>Clique em "Baixar missão" para gerar o arquivo <span class="badge">.csv</span>.</li>
-          <li>Abra o app <b>Litchi</b> no celular, vá em <b>Mission Hub</b> → importar CSV (ou envie o arquivo para o celular e importe pelo app).</li>
-          <li>Revise a missão, conecte no drone e inicie o voo. Ele visitará cada ponto na ordem e tirará uma foto automaticamente — voltando ao ponto inicial no final, se você marcar essa opção.</li>
-        </ol>
-        <p>⚠️ Sempre revise a missão no Litchi antes de voar (altitude, obstáculos, espaço aéreo e regras locais da ANAC/DECEA).</p>
+        <summary>⚙️ Configurações avançadas (opcional)</summary>
+        <div class="row" style="margin-top:10px;">
+          <div class="field">
+            <label>Altura de voo (m)</label>
+            <input type="number" id="cfgAlt" value="30" min="2" max="500" step="1">
+          </div>
+          <div class="field">
+            <label>Velocidade (m/s)</label>
+            <input type="number" id="cfgSpeed" value="0" min="0" max="15" step="0.5">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Ângulo da câmera (°)</label>
+            <input type="number" id="cfgGimbal" value="-90" min="-90" max="20" step="5">
+          </div>
+          <div class="field">
+            <label>Altura relativa a</label>
+            <select id="cfgAltMode">
+              <option value="0">Decolagem</option>
+              <option value="1">Solo (terreno)</option>
+            </select>
+          </div>
+        </div>
+        <p>Se você não mexer aqui, o drone voa a 30 metros de altura, na velocidade padrão do Litchi, com a câmera apontando reto para baixo (-90°) — bom o suficiente para a maioria das fotos.</p>
       </details>
-    </div>
-
-    <div id="footerActions">
-      <button id="downloadBtn" class="btn-primary btn-block" disabled>⬇️ Baixar missão (CSV Litchi)</button>
     </div>
   </div>
 
-  <div id="map"></div>
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div id="mapHint" class="map-hint">👉 Toque no mapa para marcar o primeiro lugar</div>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -212,6 +229,7 @@
     }
     renderList();
     document.getElementById('downloadBtn').disabled = waypoints.length === 0;
+    document.getElementById('mapHint').style.display = waypoints.length === 0 ? 'block' : 'none';
   }
 
   function addWaypoint(lat, lng){
