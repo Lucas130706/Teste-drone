@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Missão do Drone</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg:#0f172a; --panel:#111827; --panel2:#1a2436; --border:#2a3548;
+    --text:#e8edf5; --muted:#8b98ad; --accent:#38bdf8; --accent2:#22d3ee;
+    --danger:#f87171; --ok:#34d399; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text); display:flex; flex-direction:column;
+  }
+  header{
+    padding:14px 20px; border-bottom:1px solid var(--border); background:var(--panel);
+    display:flex; align-items:center; gap:10px; flex-shrink:0;
+  }
+  header h1{font-size:16px; margin:0; font-weight:600; letter-spacing:.2px;}
+  header .sub{color:var(--muted); font-size:12.5px;}
+  .layout{flex:1; display:flex; min-height:0;}
+  #sidebar{
+    width:340px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; overflow-y:auto;
+  }
+  #map{flex:1; min-width:0; background:#0a0f1a;}
+  .section{padding:14px 16px; border-bottom:1px solid var(--border);}
+  .section h2{font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 0 10px;}
+  .row{display:flex; gap:8px; margin-bottom:8px;}
+  .field{flex:1; display:flex; flex-direction:column; gap:4px;}
+  .field label{font-size:11.5px; color:var(--muted);}
+  .field input, .field select{
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:7px 8px; font-size:13px; width:100%;
+  }
+  .field input:focus, .field select:focus{outline:none; border-color:var(--accent);}
+  button{
+    cursor:pointer; border:1px solid var(--border); background:var(--panel2); color:var(--text);
+    border-radius:7px; padding:9px 12px; font-size:13px; font-weight:500; transition:filter .15s;
+  }
+  button:hover{filter:brightness(1.2);}
+  button:active{filter:brightness(0.95);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .btn-block{width:100%;}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#04121c; border:none; font-weight:700;}
+  .btn-danger{color:var(--danger); border-color:#4a2530;}
+  .btn-ghost{background:transparent;}
+  #locateBtn{display:flex; align-items:center; justify-content:center; gap:6px;}
+  #waypointList{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
+  #waypointList li{
+    display:flex; align-items:center; gap:8px; background:var(--panel2); border:1px solid var(--border);
+    border-radius:8px; padding:7px 9px;
+  }
+  .wp-num{
+    width:22px; height:22px; border-radius:50%; background:var(--accent); color:#04121c;
+    font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .wp-info{flex:1; min-width:0; font-size:12px; color:var(--muted); line-height:1.35;}
+  .wp-info b{color:var(--text); font-weight:600;}
+  .wp-actions{display:flex; gap:3px; flex-shrink:0;}
+  .wp-actions button{padding:4px 7px; font-size:11px;}
+  #emptyHint{color:var(--muted); font-size:12.5px; padding:8px 2px; line-height:1.5;}
+  .status{font-size:12px; color:var(--muted); margin-top:8px;}
+  .status b{color:var(--text);}
+  .num-icon{
+    background:var(--accent); color:#04121c; border-radius:50%; width:26px; height:26px;
+    display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;
+    border:2px solid #04121c; box-shadow:0 1px 4px rgba(0,0,0,.5);
+  }
+  .me-icon{
+    background:var(--ok); border-radius:50%; width:16px; height:16px; border:3px solid #04121c22;
+    box-shadow:0 0 0 4px rgba(52,211,153,.25);
+  }
+  details summary{cursor:pointer; font-size:12.5px; color:var(--accent); font-weight:600; padding:4px 0;}
+  details p, details ol{font-size:12.3px; color:var(--muted); line-height:1.6; margin:8px 0 0;}
+  details ol{padding-left:18px;}
+  #footerActions{padding:14px 16px; display:flex; flex-direction:column; gap:8px; margin-top:auto;}
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip{background:var(--panel2); color:var(--text);}
+  .badge{display:inline-block; font-size:10.5px; padding:2px 6px; border-radius:4px; background:#1e293b; color:var(--accent); border:1px solid var(--border);}
+  @media (max-width:760px){
+    .layout{flex-direction:column;}
+    #sidebar{width:100%; max-height:46vh; border-right:none; border-bottom:1px solid var(--border);}
+    #map{flex:1;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛰️ Missão do Drone</h1>
+  <span class="sub">marque pontos no mapa → exporte a missão para o Litchi</span>
+</header>
+
+<div class="layout">
+  <div id="sidebar">
+
+    <div class="section">
+      <h2>Sua localização</h2>
+      <button id="locateBtn" class="btn-block">📍 Centralizar na minha posição</button>
+    </div>
+
+    <div class="section">
+      <h2>Configurações de voo</h2>
+      <div class="row">
+        <div class="field">
+          <label>Altitude (m)</label>
+          <input type="number" id="cfgAlt" value="30" min="2" max="500" step="1">
+        </div>
+        <div class="field">
+          <label>Velocidade (m/s)</label>
+          <input type="number" id="cfgSpeed" value="0" min="0" max="15" step="0.5">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Ângulo da câmera (°)</label>
+          <input type="number" id="cfgGimbal" value="-90" min="-90" max="20" step="5">
+        </div>
+        <div class="field">
+          <label>Altitude relativa a</label>
+          <select id="cfgAltMode">
+            <option value="0">Decolagem</option>
+            <option value="1">Solo (terreno)</option>
+          </select>
+        </div>
+      </div>
+      <div class="status">Velocidade 0 = usa a velocidade padrão definida no app Litchi.</div>
+    </div>
+
+    <div class="section" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+      <h2>Pontos da missão (<span id="wpCount">0</span>)</h2>
+      <div id="emptyHint">Clique no mapa para adicionar pontos. O drone visitará cada um, na ordem da lista, e tirará uma foto.</div>
+      <ul id="waypointList"></ul>
+      <div class="row" style="margin-top:10px;">
+        <button id="clearBtn" class="btn-ghost btn-danger btn-block">🗑️ Limpar todos os pontos</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <details>
+        <summary>Como usar com o seu DJI (Mavic / Air / Mini)</summary>
+        <p>Seu drone DJI não aceita comandos direto de um site — por isso este planejador gera um arquivo de missão para o app <b>Litchi</b>, que tem licença oficial da DJI para voar seu modelo automaticamente.</p>
+        <ol>
+          <li>Marque os pontos no mapa e ajuste altitude/velocidade/câmera.</li>
+          <li>Clique em "Baixar missão" para gerar o arquivo <span class="badge">.csv</span>.</li>
+          <li>Abra o app <b>Litchi</b> no celular, vá em <b>Mission Hub</b> → importar CSV (ou envie o arquivo para o celular e importe pelo app).</li>
+          <li>Revise a missão, conecte no drone e inicie o voo. Ele visitará cada ponto na ordem e tirará uma foto automaticamente.</li>
+        </ol>
+        <p>⚠️ Sempre revise a missão no Litchi antes de voar (altitude, obstáculos, espaço aéreo e regras locais da ANAC/DECEA).</p>
+      </details>
+    </div>
+
+    <div id="footerActions">
+      <button id="downloadBtn" class="btn-primary btn-block" disabled>⬇️ Baixar missão (CSV Litchi)</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const DEFAULT_CENTER = [-23.5505, -46.6333]; // fallback: São Paulo
+  const map = L.map('map', {zoomControl:true}).setView(DEFAULT_CENTER, 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  let waypoints = []; // {id, lat, lng, marker}
+  let nextId = 1;
+  let polyline = L.polyline([], {color:'#38bdf8', weight:3, opacity:.8, dashArray:'6 6'}).addTo(map);
+  let meMarker = null;
+
+  function numIcon(n){
+    return L.divIcon({
+      html:`<div class="num-icon">${n}</div>`,
+      className:'', iconSize:[26,26], iconAnchor:[13,13]
+    });
+  }
+
+  function refreshNumbers(){
+    waypoints.forEach((wp, i) => {
+      wp.marker.setIcon(numIcon(i+1));
+    });
+    polyline.setLatLngs(waypoints.map(wp => [wp.lat, wp.lng]));
+    renderList();
+    document.getElementById('downloadBtn').disabled = waypoints.length === 0;
+  }
+
+  function addWaypoint(lat, lng){
+    const id = nextId++;
+    const marker = L.marker([lat, lng], {icon: numIcon(waypoints.length+1), draggable:true}).addTo(map);
+    marker.bindPopup('Ponto — clique em remover na lista para excluir.');
+    marker.on('dragend', () => {
+      const wp = waypoints.find(w => w.id === id);
+      const p = marker.getLatLng();
+      wp.lat = p.lat; wp.lng = p.lng;
+      refreshNumbers();
+    });
+    waypoints.push({id, lat, lng, marker});
+    refreshNumbers();
+  }
+
+  function removeWaypoint(id){
+    const idx = waypoints.findIndex(w => w.id === id);
+    if(idx === -1) return;
+    map.removeLayer(waypoints[idx].marker);
+    waypoints.splice(idx, 1);
+    refreshNumbers();
+  }
+
+  function moveWaypoint(id, dir){
+    const idx = waypoints.findIndex(w => w.id === id);
+    const swapWith = idx + dir;
+    if(swapWith < 0 || swapWith >= waypoints.length) return;
+    [waypoints[idx], waypoints[swapWith]] = [waypoints[swapWith], waypoints[idx]];
+    refreshNumbers();
+  }
+
+  function renderList(){
+    const list = document.getElementById('waypointList');
+    const empty = document.getElementById('emptyHint');
+    document.getElementById('wpCount').textContent = waypoints.length;
+    empty.style.display = waypoints.length ? 'none' : 'block';
+    list.innerHTML = '';
+    waypoints.forEach((wp, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="wp-num">${i+1}</div>
+        <div class="wp-info"><b>${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)}</b><br>📸 tirar foto</div>
+        <div class="wp-actions">
+          <button data-act="up" title="Mover para cima">↑</button>
+          <button data-act="down" title="Mover para baixo">↓</button>
+          <button data-act="del" title="Remover">✕</button>
+        </div>`;
+      li.querySelector('[data-act="up"]').onclick = () => moveWaypoint(wp.id, -1);
+      li.querySelector('[data-act="down"]').onclick = () => moveWaypoint(wp.id, 1);
+      li.querySelector('[data-act="del"]').onclick = () => removeWaypoint(wp.id);
+      list.appendChild(li);
+    });
+  }
+
+  map.on('click', (e) => addWaypoint(e.latlng.lat, e.latlng.lng));
+
+  document.getElementById('clearBtn').onclick = () => {
+    if(!waypoints.length) return;
+    if(!confirm('Remover todos os pontos da missão?')) return;
+    waypoints.forEach(wp => map.removeLayer(wp.marker));
+    waypoints = [];
+    refreshNumbers();
+  };
+
+  document.getElementById('locateBtn').onclick = () => {
+    if(!navigator.geolocation){
+      alert('Seu navegador não suporta geolocalização.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const {latitude, longitude} = pos.coords;
+        map.setView([latitude, longitude], 16);
+        if(meMarker) map.removeLayer(meMarker);
+        meMarker = L.marker([latitude, longitude], {
+          icon: L.divIcon({html:'<div class="me-icon"></div>', className:'', iconSize:[16,16], iconAnchor:[8,8]})
+        }).addTo(map).bindPopup('Você está aqui').openPopup();
+      },
+      err => alert('Não foi possível obter sua localização: ' + err.message),
+      {enableHighAccuracy:true, timeout:10000}
+    );
+  };
+
+  // Try to center on the user automatically on load (fails silently if denied)
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      pos => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
+      () => {},
+      {timeout:8000}
+    );
+  }
+
+  function csvEscapeNum(n){ return String(n); }
+
+  function buildLitchiCSV(){
+    const alt = parseFloat(document.getElementById('cfgAlt').value) || 30;
+    const speed = parseFloat(document.getElementById('cfgSpeed').value) || 0;
+    const gimbal = parseFloat(document.getElementById('cfgGimbal').value) || 0;
+    const altMode = document.getElementById('cfgAltMode').value; // 0 or 1
+
+    const header = [
+      'latitude','longitude','altitude(m)','heading(deg)','curvesize(m)','rotationdir',
+      'gimbalmode','gimbalpitchangle','actiontype1','actionparam1',
+      'altitudemode','speed(m/s)','poi_latitude','poi_longitude','poi_altitude(m)',
+      'poi_altitudemode','photo_timeinterval','photo_distinterval'
+    ];
+
+    const rows = waypoints.map(wp => [
+      wp.lat.toFixed(6),
+      wp.lng.toFixed(6),
+      csvEscapeNum(alt),
+      0,          // heading(deg) - only used with Custom heading mode in Litchi
+      0,          // curvesize(m) - straight line between points
+      0,          // rotationdir
+      2,          // gimbalmode: interpolate
+      csvEscapeNum(gimbal),
+      1,          // actiontype1: Take Photo
+      0,          // actionparam1: unused for photo
+      altMode,
+      csvEscapeNum(speed),
+      0,0,0,0,    // poi fields unused
+      -1,-1       // photo interval/distance capture disabled (using explicit action instead)
+    ]);
+
+    return [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+  }
+
+  document.getElementById('downloadBtn').onclick = () => {
+    if(!waypoints.length) return;
+    const csv = buildLitchiCSV();
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.href = url;
+    a.download = `missao-drone-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+</script>
+</body>
+</html>
