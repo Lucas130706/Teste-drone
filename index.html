@@ -65,6 +65,11 @@
   .wp-actions{display:flex; gap:3px; flex-shrink:0;}
   .wp-actions button{padding:4px 7px; font-size:11px;}
   #emptyHint{color:var(--muted); font-size:12.5px; padding:8px 2px; line-height:1.5;}
+  .loop-toggle{
+    display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text);
+    margin-top:10px; cursor:pointer; user-select:none;
+  }
+  .loop-toggle input{width:15px; height:15px; accent-color:var(--accent); cursor:pointer;}
   .status{font-size:12px; color:var(--muted); margin-top:8px;}
   .status b{color:var(--text);}
   .num-icon{
@@ -136,6 +141,10 @@
       <h2>Pontos da missão (<span id="wpCount">0</span>)</h2>
       <div id="emptyHint">Clique no mapa para adicionar pontos. O drone visitará cada um, na ordem da lista, e tirará uma foto.</div>
       <ul id="waypointList"></ul>
+      <label class="loop-toggle">
+        <input type="checkbox" id="closeLoopChk">
+        <span>🔁 Voltar ao ponto inicial no final da missão</span>
+      </label>
       <div class="row" style="margin-top:10px;">
         <button id="clearBtn" class="btn-ghost btn-danger btn-block">🗑️ Limpar todos os pontos</button>
       </div>
@@ -149,7 +158,7 @@
           <li>Marque os pontos no mapa e ajuste altitude/velocidade/câmera.</li>
           <li>Clique em "Baixar missão" para gerar o arquivo <span class="badge">.csv</span>.</li>
           <li>Abra o app <b>Litchi</b> no celular, vá em <b>Mission Hub</b> → importar CSV (ou envie o arquivo para o celular e importe pelo app).</li>
-          <li>Revise a missão, conecte no drone e inicie o voo. Ele visitará cada ponto na ordem e tirará uma foto automaticamente.</li>
+          <li>Revise a missão, conecte no drone e inicie o voo. Ele visitará cada ponto na ordem e tirará uma foto automaticamente — voltando ao ponto inicial no final, se você marcar essa opção.</li>
         </ol>
         <p>⚠️ Sempre revise a missão no Litchi antes de voar (altitude, obstáculos, espaço aéreo e regras locais da ANAC/DECEA).</p>
       </details>
@@ -175,7 +184,9 @@
 
   let waypoints = []; // {id, lat, lng, marker}
   let nextId = 1;
+  let closeLoop = false;
   let polyline = L.polyline([], {color:'#38bdf8', weight:3, opacity:.8, dashArray:'6 6'}).addTo(map);
+  let closingSegment = L.polyline([], {color:'#38bdf8', weight:3, opacity:.5, dashArray:'2 8'}).addTo(map);
   let meMarker = null;
 
   function numIcon(n){
@@ -190,6 +201,12 @@
       wp.marker.setIcon(numIcon(i+1));
     });
     polyline.setLatLngs(waypoints.map(wp => [wp.lat, wp.lng]));
+    if(closeLoop && waypoints.length > 1){
+      const first = waypoints[0], last = waypoints[waypoints.length - 1];
+      closingSegment.setLatLngs([[last.lat, last.lng], [first.lat, first.lng]]);
+    } else {
+      closingSegment.setLatLngs([]);
+    }
     renderList();
     document.getElementById('downloadBtn').disabled = waypoints.length === 0;
   }
@@ -257,33 +274,36 @@
     refreshNumbers();
   };
 
-  document.getElementById('locateBtn').onclick = () => {
+  document.getElementById('closeLoopChk').onchange = (e) => {
+    closeLoop = e.target.checked;
+    refreshNumbers();
+  };
+
+  function showMyLocation(recenter, silent){
     if(!navigator.geolocation){
-      alert('Seu navegador não suporta geolocalização.');
+      if(!silent) alert('Seu navegador não suporta geolocalização.');
       return;
     }
     navigator.geolocation.getCurrentPosition(
       pos => {
         const {latitude, longitude} = pos.coords;
-        map.setView([latitude, longitude], 16);
+        if(recenter) map.setView([latitude, longitude], 16);
         if(meMarker) map.removeLayer(meMarker);
         meMarker = L.marker([latitude, longitude], {
-          icon: L.divIcon({html:'<div class="me-icon"></div>', className:'', iconSize:[16,16], iconAnchor:[8,8]})
-        }).addTo(map).bindPopup('Você está aqui').openPopup();
+          icon: L.divIcon({html:'<div class="me-icon"></div>', className:'', iconSize:[16,16], iconAnchor:[8,8]}),
+          zIndexOffset: 1000
+        }).addTo(map).bindPopup('Você está aqui');
+        if(!silent) meMarker.openPopup();
       },
-      err => alert('Não foi possível obter sua localização: ' + err.message),
+      err => { if(!silent) alert('Não foi possível obter sua localização: ' + err.message); },
       {enableHighAccuracy:true, timeout:10000}
     );
-  };
-
-  // Try to center on the user automatically on load (fails silently if denied)
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(
-      pos => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
-      () => {},
-      {timeout:8000}
-    );
   }
+
+  document.getElementById('locateBtn').onclick = () => showMyLocation(true, false);
+
+  // Show the user's location automatically on load (fails silently if denied)
+  showMyLocation(true, true);
 
   function csvEscapeNum(n){ return String(n); }
 
@@ -300,7 +320,12 @@
       'poi_altitudemode','photo_timeinterval','photo_distinterval'
     ];
 
-    const rows = waypoints.map(wp => [
+    const missionPoints = waypoints.slice();
+    if(closeLoop && missionPoints.length > 1){
+      missionPoints.push(missionPoints[0]); // return to the starting point
+    }
+
+    const rows = missionPoints.map(wp => [
       wp.lat.toFixed(6),
       wp.lng.toFixed(6),
       csvEscapeNum(alt),
